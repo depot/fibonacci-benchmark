@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Compute fib(n) and dispatch next run
         env:
-          DEPOT_TOKEN: ${{ secrets.DEPOT_TOKEN }}
+          DEPOT_TOKEN: ${{ secrets.DEPOT_ORG_API_TOKEN }}
           REPO: ${{ github.repository }}
           REF: ${{ github.ref_name }}
           N: ${{ inputs.n }}
