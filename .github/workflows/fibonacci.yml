@@ -1,0 +1,45 @@
+name: Fibonacci calculation (GitHub benchmark)
+
+on:
+  workflow_dispatch:
+    inputs:
+      n:
+        description: 'Fibonacci index computed by this run'
+        required: false
+        default: '3'
+      a:
+        description: 'fib(n-2)'
+        required: false
+        default: '1'
+      b:
+        description: 'fib(n-1)'
+        required: false
+        default: '1'
+
+permissions:
+  actions: write
+
+jobs:
+  fib:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Compute fib(n) and dispatch next run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
+          N: ${{ inputs.n }}
+          A: ${{ inputs.a }}
+          B: ${{ inputs.b }}
+        run: |
+          value=$((A + B))
+          echo "fib($N) = $value"
+          if [ "$N" -ge 20 ]; then
+            echo "Done: fib(20) = $value"
+            exit 0
+          fi
+          gh workflow run fibonacci.yml \
+            --ref "$REF" \
+            -f "n=$((N + 1))" \
+            -f "a=$B" \
+            -f "b=$value"
