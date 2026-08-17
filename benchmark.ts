@@ -48,7 +48,7 @@ try {
   const provider = createProvider({ repo, ref, variant, firstN: FIRST_N, lastN: depth });
   await runBenchmark(provider, {
     expectedRuns: depth - FIRST_N + 1,
-    pollMs: Number(process.env.POLL_MS ?? 3000),
+    pollMs: Number(process.env.POLL_MS ?? 1000),
     timeoutMs: Number(process.env.TIMEOUT_MS ?? 30 * 60 * 1000),
   });
 } catch (error) {
