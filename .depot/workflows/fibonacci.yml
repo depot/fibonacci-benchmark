@@ -35,7 +35,7 @@ jobs:
             echo "Done: fib(20) = $value"
             exit 0
           fi
-          ~/.depot/bin/depot ci dispatch \
+          depot ci dispatch \
             --repo "$REPO" \
             --workflow fibonacci.yml \
             --ref "$REF" \
