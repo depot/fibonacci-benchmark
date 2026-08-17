@@ -1,0 +1,50 @@
+name: Fibonacci concurrent (GitHub benchmark)
+
+on:
+  workflow_dispatch:
+    inputs:
+      n:
+        description: 'Fibonacci index computed by this run'
+        required: true
+      chain:
+        description: 'Chain ID shared by all runs of one benchmark invocation'
+        required: true
+
+permissions:
+  actions: read
+
+jobs:
+  fib:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Wait for predecessor result and compute fib(n)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          N: ${{ inputs.n }}
+          CHAIN: ${{ inputs.chain }}
+        run: |
+          a=1 b=1
+          if [ "$N" -gt 3 ]; then
+            prev="fib-$CHAIN-$((N - 1))"
+            artifact_id=""
+            for i in $(seq 1 300); do
+              artifact_id=$(gh api "repos/$REPO/actions/artifacts?name=$prev" -q '.artifacts[0].id // empty')
+              [ -n "$artifact_id" ] && break
+              sleep 2
+            done
+            [ -n "$artifact_id" ] || { echo "timed out waiting for $prev"; exit 1; }
+            gh api "repos/$REPO/actions/artifacts/$artifact_id/zip" > result.zip
+            unzip -o result.zip
+            read -r a b < result.txt
+          fi
+          value=$((a + b))
+          echo "fib($N) = $value"
+          mkdir -p out
+          echo "$b $value" > out/result.txt
+
+      - name: Publish result
+        uses: actions/upload-artifact@v4
+        with:
+          name: fib-${{ inputs.chain }}-${{ inputs.n }}
+          path: out/result.txt

@@ -1,0 +1,20 @@
+{
+  "name": "fibonacci-benchmark",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "benchmark": "node benchmark.ts",
+    "benchmark:depot": "node benchmark.ts depot depot/fibonacci-benchmark main",
+    "benchmark:github": "node benchmark.ts github depot/fibonacci-benchmark main",
+    "benchmark:depot:concurrent": "node benchmark.ts depot depot/fibonacci-benchmark main concurrent",
+    "benchmark:github:concurrent": "node benchmark.ts github depot/fibonacci-benchmark main concurrent"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  }
+}

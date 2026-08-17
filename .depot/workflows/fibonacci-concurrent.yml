@@ -1,0 +1,46 @@
+name: Fibonacci concurrent (Depot benchmark)
+
+on:
+  workflow_dispatch:
+    inputs:
+      n:
+        description: 'Fibonacci index computed by this run'
+        required: true
+      prev_run_id:
+        description: 'Run ID computing fib(n-1); empty for the first run'
+        required: false
+        default: ''
+
+jobs:
+  fib:
+    runs-on: depot-ubuntu-24.04
+    steps:
+      - name: Wait for predecessor result and compute fib(n)
+        env:
+          DEPOT_TOKEN: ${{ secrets.FIBONACCI_BENCHMARK_ORG_TOKEN }}
+          N: ${{ inputs.n }}
+          PREV: ${{ inputs.prev_run_id }}
+        run: |
+          a=1 b=1
+          if [ -n "$PREV" ]; then
+            artifact_id=""
+            for i in $(seq 1 300); do
+              artifact_id=$(depot ci artifacts list "$PREV" -o json | jq -r '.artifacts[] | select(.name == "result") | .artifact_id' | head -n1)
+              [ -n "$artifact_id" ] && break
+              sleep 2
+            done
+            [ -n "$artifact_id" ] || { echo "timed out waiting for result of $PREV"; exit 1; }
+            depot ci artifacts download "$artifact_id" --output-file result.zip
+            unzip -o result.zip
+            read -r a b < result.txt
+          fi
+          value=$((a + b))
+          echo "fib($N) = $value"
+          mkdir -p out
+          echo "$b $value" > out/result.txt
+
+      - name: Publish result
+        uses: actions/upload-artifact@v4
+        with:
+          name: result
+          path: out/result.txt
