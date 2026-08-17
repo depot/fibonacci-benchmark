@@ -1,5 +1,5 @@
-import { WORKFLOWS, type Provider, type ProviderOptions, type RunDetail } from "./types.ts";
-import { fetchJson, requireEnv } from "./util.ts";
+import { WORKFLOWS, type Provider, type ProviderOptions, type Run } from "./types.ts";
+import { earliestTimestamp, fetchJson, latestTimestamp, requireEnv } from "./util.ts";
 
 interface WorkflowRun {
   id: number;
@@ -12,6 +12,15 @@ interface WorkflowRun {
 
 interface ListRunsResponse {
   workflow_runs?: WorkflowRun[];
+}
+
+interface WorkflowJob {
+  started_at?: string;
+  completed_at?: string | null;
+}
+
+interface ListJobsResponse {
+  jobs?: WorkflowJob[];
 }
 
 /**
@@ -41,13 +50,11 @@ export function createGithubProvider(options: ProviderOptions): Provider {
       body: JSON.stringify({ ref, inputs }),
     });
 
-  const toDetail = (run: WorkflowRun): RunDetail => ({
+  const toRun = (run: WorkflowRun): Run => ({
     id: String(run.id),
     createdAt: run.created_at,
     done: run.status === "completed",
     ok: run.conclusion === null || run.conclusion === "success",
-    startedAt: run.run_started_at,
-    finishedAt: run.status === "completed" ? run.updated_at : undefined,
   });
 
   return {
@@ -72,11 +79,25 @@ export function createGithubProvider(options: ProviderOptions): Provider {
 
     async listRuns() {
       const { workflow_runs = [] } = await api<ListRunsResponse>(`/actions/workflows/${workflow}/runs?per_page=100`);
-      return workflow_runs.map(toDetail);
+      return workflow_runs.map(toRun);
     },
 
+    /**
+     * Timing comes from the run's jobs, which expose real execution
+     * boundaries. The run object has no completion timestamp, only
+     * `updated_at`, which is merely the last write to the record, so job
+     * timings are what make this comparable to the Depot provider.
+     */
     async runDetail(id) {
-      return toDetail(await api<WorkflowRun>(`/actions/runs/${id}`));
+      const [run, { jobs = [] }] = await Promise.all([
+        api<WorkflowRun>(`/actions/runs/${id}`),
+        api<ListJobsResponse>(`/actions/runs/${id}/jobs?per_page=100`),
+      ]);
+      return {
+        ...toRun(run),
+        startedAt: earliestTimestamp(jobs.map((job) => job.started_at)) ?? run.run_started_at,
+        finishedAt: latestTimestamp(jobs.map((job) => job.completed_at ?? undefined)),
+      };
     },
   };
 }

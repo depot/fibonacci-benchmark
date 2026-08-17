@@ -1,5 +1,5 @@
 import type { Provider, Run, RunDetail } from "./types.ts";
-import { formatDuration, parseTimestamp, sleep } from "./util.ts";
+import { earliestTimestamp, formatDuration, latestTimestamp, parseTimestamp, sleep } from "./util.ts";
 
 export interface BenchmarkOptions {
   expectedRuns: number;
@@ -10,9 +10,13 @@ export interface BenchmarkOptions {
 /**
  * Dispatch the chain and measure until the final run completes.
  *
- * Reports two totals: local wall-clock (dispatch to observed completion,
- * subject to poll granularity) and server-side (first run created to last
- * run finished, from provider timestamps), plus a per-run breakdown.
+ * Reports two totals plus a per-run breakdown:
+ *
+ * - local wall-clock: the dispatch call to observed completion, so it includes
+ *   client latency and up to one poll interval of slack.
+ * - server-side: the initial dispatch (earliest run creation) to the last
+ *   job's completion, entirely from provider timestamps. Includes the queue
+ *   gaps between runs, which are a real cost of chaining.
  */
 export async function runBenchmark(provider: Provider, options: BenchmarkOptions): Promise<void> {
   // Snapshot pre-existing runs so only the new chain is counted.
@@ -67,29 +71,30 @@ async function fetchDetails(provider: Provider, chain: Run[], pollMs: number): P
     await sleep(pollMs);
     details = await Promise.all(chain.map((run) => provider.runDetail(run.id)));
   }
-  return details.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // Order by parsed time: timestamp formats vary by provider, so a
+  // lexicographic sort is not reliably chronological.
+  return details.sort((a, b) => (parseTimestamp(a.createdAt) ?? 0) - (parseTimestamp(b.createdAt) ?? 0));
 }
 
 function report(provider: Provider, details: RunDetail[], wallClockMs: number, pollMs: number): void {
-  const firstDetail = details[0];
-  const first = parseTimestamp(firstDetail?.createdAt);
-  const finishTimes = details
-    .map((d) => parseTimestamp(d.finishedAt))
-    .filter((t): t is number => t !== undefined);
+  // The server-side total spans the initial dispatch (the earliest run
+  // creation) to the moment the last job finished.
+  const dispatchedAt = earliestTimestamp(details.map((d) => d.createdAt));
+  const lastFinishedAt = latestTimestamp(details.map((d) => d.finishedAt));
+  const start = parseTimestamp(dispatchedAt);
+  const end = parseTimestamp(lastFinishedAt);
+  const missingFinish = details.filter((d) => parseTimestamp(d.finishedAt) === undefined).length;
 
   console.log(`${provider.name} chain complete (${details.length} runs)`);
   console.log(`  local wall-clock : ${formatDuration(wallClockMs)} (${pollMs / 1000}s poll granularity)`);
 
-  if (firstDetail !== undefined && first !== undefined && finishTimes.length > 0) {
-    if (finishTimes.length < details.length) {
+  if (start !== undefined && end !== undefined) {
+    if (missingFinish > 0) {
       console.log(
-        `  warning: ${details.length - finishTimes.length} run(s) missing a finished timestamp; server-side total may be understated`,
+        `  warning: ${missingFinish} run(s) missing a finished timestamp; server-side total may be understated`,
       );
     }
-    const last = Math.max(...finishTimes);
-    console.log(
-      `  server-side      : ${formatDuration(last - first)} (${firstDetail.createdAt} -> ${new Date(last).toISOString()})`,
-    );
+    console.log(`  server-side      : ${formatDuration(end - start)} (${dispatchedAt} -> ${lastFinishedAt})`);
   } else {
     console.log("  server-side      : unavailable (timestamps missing or unparseable; see breakdown below)");
   }

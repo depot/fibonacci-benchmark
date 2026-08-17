@@ -28,3 +28,25 @@ export function parseTimestamp(value?: string): number | undefined {
   const ms = value ? Date.parse(value) : NaN;
   return Number.isNaN(ms) ? undefined : ms;
 }
+
+/** Select one timestamp by parsed value, preserving the original string. */
+function pickTimestamp(
+  values: ReadonlyArray<string | undefined>,
+  isBetter: (candidate: number, incumbent: number) => boolean,
+): string | undefined {
+  let best: { value: string; ms: number } | undefined;
+  for (const value of values) {
+    const ms = parseTimestamp(value);
+    if (value === undefined || ms === undefined) continue;
+    if (best === undefined || isBetter(ms, best.ms)) best = { value, ms };
+  }
+  return best?.value;
+}
+
+/** Earliest of the given timestamps, ignoring missing ones. */
+export const earliestTimestamp = (values: ReadonlyArray<string | undefined>): string | undefined =>
+  pickTimestamp(values, (candidate, incumbent) => candidate < incumbent);
+
+/** Latest of the given timestamps, ignoring missing ones. */
+export const latestTimestamp = (values: ReadonlyArray<string | undefined>): string | undefined =>
+  pickTimestamp(values, (candidate, incumbent) => candidate > incumbent);

@@ -21,7 +21,13 @@ export interface Run {
   ok: boolean;
 }
 
-/** Timing detail for a run, fetched once the chain completes. */
+/**
+ * Timing detail for a run, fetched once the chain completes.
+ *
+ * `startedAt`/`finishedAt` are job-level execution boundaries on every
+ * provider, so per-run durations mean the same thing across providers.
+ * `createdAt` stays the moment the run was created by the dispatch.
+ */
 export interface RunDetail extends Run {
   startedAt?: string;
   finishedAt?: string;

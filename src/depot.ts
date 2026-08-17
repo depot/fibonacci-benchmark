@@ -1,5 +1,5 @@
 import { WORKFLOWS, type Provider, type ProviderOptions, type Run } from "./types.ts";
-import { fetchJson, requireEnv } from "./util.ts";
+import { earliestTimestamp, fetchJson, latestTimestamp, requireEnv } from "./util.ts";
 
 const TERMINAL_STATUSES = new Set(["finished", "failed", "cancelled"]);
 const FAILED_STATUSES = new Set(["failed", "cancelled"]);
@@ -20,11 +20,17 @@ interface ListWorkflowsResponse {
   workflows?: WorkflowSummary[];
 }
 
+interface WorkflowJob {
+  startedAt?: string;
+  finishedAt?: string;
+}
+
 interface GetWorkflowResponse {
   workflowStatus: string;
   workflowCreatedAt: string;
   workflowStartedAt?: string;
   workflowFinishedAt?: string;
+  jobs?: WorkflowJob[];
 }
 
 /**
@@ -92,15 +98,20 @@ export function createDepotProvider(options: ProviderOptions): Provider {
       return runs.map(toRun);
     },
 
-    // Workflow-level timestamps match the Depot UI's durations; the parent
-    // run's window would also count dispatch/finalization overhead.
+    /**
+     * Timing comes from the workflow's jobs so it measures the same thing as
+     * the GitHub provider. Workflow-level timestamps are the fallback, and the
+     * parent run's window is avoided entirely — it would also count
+     * dispatch and finalization overhead.
+     */
     async runDetail(id) {
       const w = await rpc<GetWorkflowResponse>("GetWorkflow", { workflowId: workflowIds.get(id) });
+      const jobs = w.jobs ?? [];
       return {
         id,
         createdAt: w.workflowCreatedAt,
-        startedAt: w.workflowStartedAt,
-        finishedAt: w.workflowFinishedAt,
+        startedAt: earliestTimestamp(jobs.map((job) => job.startedAt)) ?? w.workflowStartedAt,
+        finishedAt: latestTimestamp(jobs.map((job) => job.finishedAt)) ?? w.workflowFinishedAt,
         done: TERMINAL_STATUSES.has(w.workflowStatus),
         ok: !FAILED_STATUSES.has(w.workflowStatus),
       };
