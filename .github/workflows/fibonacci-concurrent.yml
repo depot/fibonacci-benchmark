@@ -9,6 +9,10 @@ on:
       chain:
         description: 'Chain ID shared by all runs of one benchmark invocation'
         required: true
+      prev_artifact:
+        description: 'Artifact published by the run computing fib(n-1); empty for the first run'
+        required: false
+        default: ''
 
 permissions:
   actions: read
@@ -22,18 +26,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           N: ${{ inputs.n }}
-          CHAIN: ${{ inputs.chain }}
+          PREV: ${{ inputs.prev_artifact }}
         run: |
           a=1 b=1
-          if [ "$N" -gt 3 ]; then
-            prev="fib-$CHAIN-$((N - 1))"
+          if [ -n "$PREV" ]; then
             artifact_id=""
             for i in $(seq 1 300); do
-              artifact_id=$(gh api "repos/$REPO/actions/artifacts?name=$prev" -q '.artifacts[0].id // empty')
+              artifact_id=$(gh api "repos/$REPO/actions/artifacts?name=$PREV" -q '.artifacts[0].id // empty')
               [ -n "$artifact_id" ] && break
               sleep 2
             done
-            [ -n "$artifact_id" ] || { echo "timed out waiting for $prev"; exit 1; }
+            [ -n "$artifact_id" ] || { echo "timed out waiting for $PREV"; exit 1; }
             gh api "repos/$REPO/actions/artifacts/$artifact_id/zip" > result.zip
             unzip -o result.zip
             read -r a b < result.txt

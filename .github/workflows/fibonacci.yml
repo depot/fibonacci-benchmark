@@ -15,6 +15,10 @@ on:
         description: 'fib(n-1)'
         required: false
         default: '1'
+      depth:
+        description: 'Final fibonacci index to compute; the chain stops here'
+        required: false
+        default: '20'
 
 permissions:
   actions: write
@@ -31,15 +35,17 @@ jobs:
           N: ${{ inputs.n }}
           A: ${{ inputs.a }}
           B: ${{ inputs.b }}
+          DEPTH: ${{ inputs.depth }}
         run: |
           value=$((A + B))
           echo "fib($N) = $value"
-          if [ "$N" -ge 20 ]; then
-            echo "Done: fib(20) = $value"
+          if [ "$N" -ge "$DEPTH" ]; then
+            echo "Done: fib($DEPTH) = $value"
             exit 0
           fi
           gh workflow run fibonacci.yml \
             --ref "$REF" \
             -f "n=$((N + 1))" \
             -f "a=$B" \
-            -f "b=$value"
+            -f "b=$value" \
+            -f "depth=$DEPTH"

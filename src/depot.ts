@@ -62,7 +62,12 @@ export function createDepotProvider(options: ProviderOptions): Provider {
 
     async dispatch() {
       if (variant === "chain") {
-        const { runId } = await rpc<DispatchWorkflowResponse>("DispatchWorkflow", { repo, workflow, ref });
+        const { runId } = await rpc<DispatchWorkflowResponse>("DispatchWorkflow", {
+          repo,
+          workflow,
+          ref,
+          inputs: { n: String(options.firstN), depth: String(options.lastN) },
+        });
         console.log(`seed run: ${runId}`);
         return;
       }

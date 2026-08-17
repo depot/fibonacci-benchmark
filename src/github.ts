@@ -56,7 +56,7 @@ export function createGithubProvider(options: ProviderOptions): Provider {
 
     async dispatch() {
       if (variant === "chain") {
-        await dispatchOne();
+        await dispatchOne({ n: String(options.firstN), depth: String(options.lastN) });
         return;
       }
       // Concurrent: dispatch every run upfront. GitHub's dispatch API returns
@@ -65,7 +65,8 @@ export function createGithubProvider(options: ProviderOptions): Provider {
       const chain = Math.random().toString(36).slice(2, 8);
       console.log(`chain id: ${chain}`);
       for (let n = options.firstN; n <= options.lastN; n++) {
-        await dispatchOne({ n: String(n), chain });
+        const prevArtifact = n === options.firstN ? "" : `fib-${chain}-${n - 1}`;
+        await dispatchOne({ n: String(n), chain, prev_artifact: prevArtifact });
       }
     },
 

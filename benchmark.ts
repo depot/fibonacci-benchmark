@@ -11,7 +11,7 @@
 //   concurrent all runs are dispatched upfront and execute concurrently; each
 //              run blocks until its predecessor publishes a result artifact.
 //
-// Environment: EXPECTED_RUNS (18), POLL_MS (3000), TIMEOUT_MS (1800000).
+// Environment: DEPTH (20), POLL_MS (3000), TIMEOUT_MS (1800000).
 
 import { runBenchmark } from "./src/benchmark.ts";
 import { createDepotProvider } from "./src/depot.ts";
@@ -36,12 +36,18 @@ if (!createProvider || !repo || !isVariant(variant)) {
   process.exit(1);
 }
 
-const expectedRuns = Number(process.env.EXPECTED_RUNS ?? 18);
+// The chain computes fib(FIRST_N)..fib(depth); fib(1) and fib(2) are the
+// seed values every run starts from, so they cost no runs.
+const depth = Number(process.env.DEPTH ?? 20);
+if (!Number.isInteger(depth) || depth < FIRST_N) {
+  console.error(`error: DEPTH must be an integer >= ${FIRST_N}, got ${process.env.DEPTH}`);
+  process.exit(1);
+}
 
 try {
-  const provider = createProvider({ repo, ref, variant, firstN: FIRST_N, lastN: FIRST_N + expectedRuns - 1 });
+  const provider = createProvider({ repo, ref, variant, firstN: FIRST_N, lastN: depth });
   await runBenchmark(provider, {
-    expectedRuns,
+    expectedRuns: depth - FIRST_N + 1,
     pollMs: Number(process.env.POLL_MS ?? 3000),
     timeoutMs: Number(process.env.TIMEOUT_MS ?? 30 * 60 * 1000),
   });
