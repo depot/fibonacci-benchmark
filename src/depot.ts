@@ -26,8 +26,9 @@ interface WorkflowJob {
 }
 
 interface GetWorkflowResponse {
+  runCreatedAt: string;
+  runFinishedAt?: string;
   workflowStatus: string;
-  workflowCreatedAt: string;
   workflowStartedAt?: string;
   workflowFinishedAt?: string;
   jobs?: WorkflowJob[];
@@ -99,19 +100,20 @@ export function createDepotProvider(options: ProviderOptions): Provider {
     },
 
     /**
-     * Timing comes from the workflow's jobs so it measures the same thing as
-     * the GitHub provider. Workflow-level timestamps are the fallback, and the
-     * parent run's window is avoided entirely — it would also count
-     * dispatch and finalization overhead.
+     * run creation precedes workflow creation (a dispatch returns a
+     * run id, and the workflow record appears once the run is expanded), so
+     * anchoring on the workflow would hide that startup latency. Job
+     * timestamps, already present in this response, give execution time.
      */
     async runDetail(id) {
       const w = await rpc<GetWorkflowResponse>("GetWorkflow", { workflowId: workflowIds.get(id) });
       const jobs = w.jobs ?? [];
       return {
         id,
-        createdAt: w.workflowCreatedAt,
-        startedAt: earliestTimestamp(jobs.map((job) => job.startedAt)) ?? w.workflowStartedAt,
-        finishedAt: latestTimestamp(jobs.map((job) => job.finishedAt)) ?? w.workflowFinishedAt,
+        createdAt: w.runCreatedAt,
+        runFinishedAt: w.runFinishedAt,
+        jobStartedAt: earliestTimestamp(jobs.map((job) => job.startedAt)) ?? w.workflowStartedAt,
+        jobFinishedAt: latestTimestamp(jobs.map((job) => job.finishedAt)) ?? w.workflowFinishedAt,
         done: TERMINAL_STATUSES.has(w.workflowStatus),
         ok: !FAILED_STATUSES.has(w.workflowStatus),
       };

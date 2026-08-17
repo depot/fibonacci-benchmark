@@ -83,10 +83,8 @@ export function createGithubProvider(options: ProviderOptions): Provider {
     },
 
     /**
-     * Timing comes from the run's jobs, which expose real execution
-     * boundaries. The run object has no completion timestamp, only
-     * `updated_at`, which is merely the last write to the record, so job
-     * timings are what make this comparable to the Depot provider.
+     * GitHub has no dedicated run completion field, so `updated_at` on a completed run
+     * stands in for it. Job timestamps give execution time.
      */
     async runDetail(id) {
       const [run, { jobs = [] }] = await Promise.all([
@@ -95,8 +93,9 @@ export function createGithubProvider(options: ProviderOptions): Provider {
       ]);
       return {
         ...toRun(run),
-        startedAt: earliestTimestamp(jobs.map((job) => job.started_at)) ?? run.run_started_at,
-        finishedAt: latestTimestamp(jobs.map((job) => job.completed_at ?? undefined)),
+        runFinishedAt: run.status === "completed" ? run.updated_at : undefined,
+        jobStartedAt: earliestTimestamp(jobs.map((job) => job.started_at)) ?? run.run_started_at,
+        jobFinishedAt: latestTimestamp(jobs.map((job) => job.completed_at ?? undefined)),
       };
     },
   };

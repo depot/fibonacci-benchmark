@@ -24,13 +24,20 @@ export interface Run {
 /**
  * Timing detail for a run, fetched once the chain completes.
  *
- * `startedAt`/`finishedAt` are job-level execution boundaries on every
- * provider, so per-run durations mean the same thing across providers.
- * `createdAt` stays the moment the run was created by the dispatch.
+ *
+ * - The run-level total (`createdAt` to `runFinishedAt`) is what the
+ *   benchmark total measures. It hides nothing: no dispatch, scheduling, or
+ *   finalization overhead falls outside it.
+ * - The job-level boundaries (`jobStartedAt` to `jobFinishedAt`) are
+ *   execution duration, which is what per-run durations report and what each
+ *   provider's UI shows.
  */
 export interface RunDetail extends Run {
-  startedAt?: string;
-  finishedAt?: string;
+  /** Run-level completion, including any provider-side finalization. */
+  runFinishedAt?: string;
+  /** Execution boundaries of the run's jobs. */
+  jobStartedAt?: string;
+  jobFinishedAt?: string;
 }
 
 /** A CI provider that can dispatch and observe benchmark runs. */

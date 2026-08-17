@@ -14,9 +14,10 @@ export interface BenchmarkOptions {
  *
  * - local wall-clock: the dispatch call to observed completion, so it includes
  *   client latency and up to one poll interval of slack.
- * - server-side: the initial dispatch (earliest run creation) to the last
- *   job's completion, entirely from provider timestamps. Includes the queue
- *   gaps between runs, which are a real cost of chaining.
+ * - server-side: from the earliest run creation to the
+ *   last run's completion, entirely from provider timestamps. It includes the
+ *   queue gaps between runs and each provider's own scheduling and
+ *   finalization overhead, so neither side can hide work outside it.
  */
 export async function runBenchmark(provider: Provider, options: BenchmarkOptions): Promise<void> {
   // Snapshot pre-existing runs so only the new chain is counted.
@@ -66,8 +67,13 @@ async function awaitCompletion(
  * finished timestamp is persisted, so retry briefly while any is missing.
  */
 async function fetchDetails(provider: Provider, chain: Run[], pollMs: number): Promise<RunDetail[]> {
+  const incomplete = (details: RunDetail[]) =>
+    details.some(
+      (d) => parseTimestamp(d.runFinishedAt) === undefined || parseTimestamp(d.jobFinishedAt) === undefined,
+    );
+
   let details = await Promise.all(chain.map((run) => provider.runDetail(run.id)));
-  for (let retry = 0; retry < 5 && details.some((d) => parseTimestamp(d.finishedAt) === undefined); retry++) {
+  for (let retry = 0; retry < 5 && incomplete(details); retry++) {
     await sleep(pollMs);
     details = await Promise.all(chain.map((run) => provider.runDetail(run.id)));
   }
@@ -77,13 +83,14 @@ async function fetchDetails(provider: Provider, chain: Run[], pollMs: number): P
 }
 
 function report(provider: Provider, details: RunDetail[], wallClockMs: number, pollMs: number): void {
-  // The server-side total spans the initial dispatch (the earliest run
-  // creation) to the moment the last job finished.
+  // The total spans the whole run: earliest run creation (the initial
+  // dispatch) to the last run's completion, so no provider-side overhead
+  // falls outside it.
   const dispatchedAt = earliestTimestamp(details.map((d) => d.createdAt));
-  const lastFinishedAt = latestTimestamp(details.map((d) => d.finishedAt));
+  const lastFinishedAt = latestTimestamp(details.map((d) => d.runFinishedAt));
   const start = parseTimestamp(dispatchedAt);
   const end = parseTimestamp(lastFinishedAt);
-  const missingFinish = details.filter((d) => parseTimestamp(d.finishedAt) === undefined).length;
+  const missingFinish = details.filter((d) => parseTimestamp(d.runFinishedAt) === undefined).length;
 
   console.log(`${provider.name} chain complete (${details.length} runs)`);
   console.log(`  local wall-clock : ${formatDuration(wallClockMs)} (${pollMs / 1000}s poll granularity)`);
@@ -99,13 +106,15 @@ function report(provider: Provider, details: RunDetail[], wallClockMs: number, p
     console.log("  server-side      : unavailable (timestamps missing or unparseable; see breakdown below)");
   }
 
-  console.log("\nper-run breakdown:");
+  // Durations are job-level execution time, excluding queue wait and
+  // finalization, which is what each provider's UI reports.
+  console.log("\nper-run breakdown (duration is job execution time):");
   for (const d of details) {
-    const start = parseTimestamp(d.startedAt);
-    const end = parseTimestamp(d.finishedAt);
-    const duration = start !== undefined && end !== undefined ? formatDuration(end - start) : "n/a";
+    const jobStart = parseTimestamp(d.jobStartedAt);
+    const jobEnd = parseTimestamp(d.jobFinishedAt);
+    const duration = jobStart !== undefined && jobEnd !== undefined ? formatDuration(jobEnd - jobStart) : "n/a";
     console.log(
-      `  ${d.id}  created ${d.createdAt}  started ${d.startedAt ?? "-"}  finished ${d.finishedAt ?? "-"}  duration ${duration}`,
+      `  ${d.id}  created ${d.createdAt}  started ${d.jobStartedAt ?? "-"}  finished ${d.jobFinishedAt ?? "-"}  run-finished ${d.runFinishedAt ?? "-"}  duration ${duration}`,
     );
   }
 }
