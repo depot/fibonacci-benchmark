@@ -8,6 +8,7 @@ interface WorkflowRun {
   created_at: string;
   run_started_at?: string;
   updated_at: string;
+  run_attempt?: number;
 }
 
 interface ListRunsResponse {
@@ -50,6 +51,18 @@ export function createGithubProvider(options: ProviderOptions): Provider {
       body: JSON.stringify({ ref, inputs }),
     });
 
+  const fetchJobs = async (runId: string, attempt: number): Promise<WorkflowJob[]> => {
+    try {
+      const { jobs = [] } = await api<ListJobsResponse>(
+        `/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`,
+      );
+      return jobs;
+    } catch (error) {
+      console.warn(`\nwarning: could not read jobs for run ${runId}: ${error instanceof Error ? error.message : error}`);
+      return [];
+    }
+  };
+
   const toRun = (run: WorkflowRun): Run => ({
     id: String(run.id),
     createdAt: run.created_at,
@@ -87,10 +100,8 @@ export function createGithubProvider(options: ProviderOptions): Provider {
      * stands in for it. Job timestamps give execution time.
      */
     async runDetail(id) {
-      const [run, { jobs = [] }] = await Promise.all([
-        api<WorkflowRun>(`/actions/runs/${id}`),
-        api<ListJobsResponse>(`/actions/runs/${id}/jobs?per_page=100`),
-      ]);
+      const run = await api<WorkflowRun>(`/actions/runs/${id}`);
+      const jobs = await fetchJobs(id, run.run_attempt ?? 1);
       return {
         ...toRun(run),
         runFinishedAt: run.status === "completed" ? run.updated_at : undefined,
