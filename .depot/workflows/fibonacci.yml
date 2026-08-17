@@ -41,5 +41,5 @@ jobs:
             --ref "$REF" \
             --input "n=$((N + 1))" \
             --input "a=$B" \
-            --input "b=$value"
+            --input "b=$value" \
             --token "$FIBONACCI_BENCHMARK_ORG_TOKEN"
